@@ -27,8 +27,8 @@ app.use('/api/yt/downloads', express.static(DOWNLOADS_DIR));
 
 app.use('/api/yt',ytRouter);
 
-app.get('*',(req,res)=>{
-    res.sendFile(path.join(__dirname,'..','public','index.html'));
+app.use((req,res)=>{
+   res.sendFile(path.join(__dirname,'..','public','index.html'));
 });
 
 if (!fs.existsSync(DOWNLOADS_DIR)) fs.mkdirSync(DOWNLOADS_DIR);
