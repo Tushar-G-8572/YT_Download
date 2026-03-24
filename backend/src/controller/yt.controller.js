@@ -10,8 +10,12 @@ export async function handleGetInfo(req,res) {
    if (!url) return res.status(400).json({ error: 'URL is required' });
  
    try {
-     const info = await ytdlp.getInfoAsync(url);
-     const thumbnails = await ytdlp.getThumbnailsAsync(url);
+     const info = await ytdlp.getInfoAsync(url,{
+      cookies:'./cookies.txt'
+     });
+     const thumbnails = await ytdlp.getThumbnailsAsync(url,{
+      cookies:'./cookies.txt'
+     });
  
      // Build available video formats
      const videoFormats = [];
