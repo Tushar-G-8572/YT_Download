@@ -1,5 +1,5 @@
 
-const BASE_URL = "http://localhost:4000/api/yt"; 
+const BASE_URL = "https://yt-download-4ls5.onrender.com/"; 
 
 /**
  * Fetch video info + available formats from the backend.
