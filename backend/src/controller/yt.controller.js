@@ -6,6 +6,7 @@ const ytdlp = new YtDlp();
 const DOWNLOADS_DIR = './downloads';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import fs from 'fs';
 
 
 const __filename = fileURLToPath(import.meta.url);
