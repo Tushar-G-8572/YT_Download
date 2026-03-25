@@ -14,8 +14,8 @@ app.disable('x-powered-by');
 
 app.use(cors({
     origin:[
-        'https://your-frontend-url.onrender.com',
-        'http://localhost:5173'
+        'https://yt-download-4ls5.onrender.com',
+        // 'http://localhost:5173'
     ]
 }));
 
