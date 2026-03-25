@@ -1,5 +1,5 @@
 import dotenv from 'dotenv'
-dotenv.config();
+dotenv.config()
 import path from "path";
 import { YtDlp } from 'ytdlp-nodejs';
 const ytdlp = new YtDlp();
@@ -84,7 +84,7 @@ export async function handleDownloadVideo(req, res) {
          .format({ filter: 'mergevideo', quality, type: 'mp4' })
          .output(DOWNLOADS_DIR)
          .embedThumbnail()
-         .cookies(COOKIES_PATH)
+         .addCustomArgs(['--cookies', COOKIES_PATH])
          .run();
 
       const filePath = response.filePaths?.[0];
@@ -112,7 +112,7 @@ export async function handleDownloadAudio(req, res) {
          .format({ filter: 'audioonly', type: 'mp3' })
          .audioQuality(bitrateNum)
          .output(DOWNLOADS_DIR)
-         .cookies(COOKIES_PATH)                          // ✅ ADD THIS
+         .addCustomArgs(['--cookies', COOKIES_PATH])                          // ✅ ADD THIS
          .run();
 
       const filePath = response.filePaths?.[0];
