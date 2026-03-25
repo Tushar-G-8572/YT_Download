@@ -84,7 +84,7 @@ export async function handleDownloadVideo(req, res) {
          .format({ filter: 'mergevideo', quality, type: 'mp4' })
          .output(DOWNLOADS_DIR)
          .embedThumbnail()
-         .addCustomArgs(['--cookies', COOKIES_PATH])
+         .cookies(COOKIES_PATH)
          .run();
 
       const filePath = response.filePaths?.[0];
@@ -112,7 +112,7 @@ export async function handleDownloadAudio(req, res) {
          .format({ filter: 'audioonly', type: 'mp3' })
          .audioQuality(bitrateNum)
          .output(DOWNLOADS_DIR)
-         .addCustomArgs(['--cookies', COOKIES_PATH])                          // ✅ ADD THIS
+         .cookies(COOKIES_PATH)
          .run();
 
       const filePath = response.filePaths?.[0];
