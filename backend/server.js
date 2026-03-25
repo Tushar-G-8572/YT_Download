@@ -9,7 +9,7 @@ import fs from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const COOKIES_PATH = process.env.NODE_ENV === 'production'
-  ? 'cookies.txt'
+  ? '/etc/secrets/cookies.txt'
   : path.join(__dirname, '..', '..', 'cookies.txt');
 
 // Startup verification
