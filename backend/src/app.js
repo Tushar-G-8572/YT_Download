@@ -14,7 +14,7 @@ app.disable('x-powered-by');
 
 app.use(cors({
     origin:[
-        // 'https://your-frontend-url.onrender.com',
+        'https://your-frontend-url.onrender.com',
         'http://localhost:5173'
     ]
 }));
