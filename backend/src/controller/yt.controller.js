@@ -8,7 +8,7 @@ import { dirname } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const COOKIES_PATH =path.join(__dirname ,'../..','/public/cookies.txt')
+const COOKIES_PATH = path.join(__dirname ,'../..','/cookies.txt')
 
 
 export async function handleGetInfo(req, res) {
