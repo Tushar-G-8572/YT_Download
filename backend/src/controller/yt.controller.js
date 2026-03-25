@@ -1,3 +1,5 @@
+import dotenv from 'dotenv'
+dotenv.config();
 import path from "path";
 import { YtDlp } from 'ytdlp-nodejs';
 const ytdlp = new YtDlp();
@@ -8,7 +10,10 @@ import { dirname } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const COOKIES_PATH = path.join(__dirname ,'../..','/cookies.txt')
+const COOKIES_PATH = process.env.NODE_ENV === 'production'
+  ? '/etc/secrets/cookies.txt'
+  : path.join(__dirname ,'../..','/cookies.txt'); 
+
 
 
 export async function handleGetInfo(req, res) {
@@ -79,7 +84,7 @@ export async function handleDownloadVideo(req, res) {
          .format({ filter: 'mergevideo', quality, type: 'mp4' })
          .output(DOWNLOADS_DIR)
          .embedThumbnail()
-         .cookies(COOKIES_PATH)                    
+         .cookies(COOKIES_PATH)
          .run();
 
       const filePath = response.filePaths?.[0];
