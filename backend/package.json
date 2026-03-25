@@ -16,6 +16,7 @@
     "axios": "^1.13.6",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "yt-dlp-exec": "^1.0.2",
     "ytdlp-nodejs": "^3.4.4"
   }
 }

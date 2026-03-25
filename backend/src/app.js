@@ -14,12 +14,13 @@ app.disable('x-powered-by');
 
 app.use(cors({
     origin:[
-        'https://your-frontend-url.onrender.com',
+        // 'https://your-frontend-url.onrender.com',
         'http://localhost:5173'
     ]
 }));
 
 app.use(express.json());
+
 
 const DOWNLOADS_DIR = path.join(__dirname,'..','downloads');
 
@@ -27,12 +28,17 @@ app.use(express.static(path.join(__dirname,'..','public')));
 
 app.use('/api/yt/downloads', express.static(DOWNLOADS_DIR));
 
-app.use('/api/yt',ytRouter);
+app.use('/api/yt', ytRouter);
 
+// API 404
+app.use('/api', (req,res)=>{
+   res.status(404).json({message:'API route not found'});
+});
+
+// SPA fallback last me
 app.use((req,res)=>{
    res.sendFile(path.join(__dirname,'..','public','index.html'));
 });
-
 if (!fs.existsSync(DOWNLOADS_DIR)) fs.mkdirSync(DOWNLOADS_DIR);
 
 export default app;

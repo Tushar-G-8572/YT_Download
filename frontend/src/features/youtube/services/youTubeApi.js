@@ -1,5 +1,6 @@
 
 const BASE_URL = "https://yt-download-4ls5.onrender.com/api/yt"; 
+// const BASE_URL ='http://localhost:4000/api/yt'
 
 /**
  * Fetch video info + available formats from the backend.
@@ -25,8 +26,12 @@ export async function downloadVideo(url, quality) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url, quality }),
   });
+  console.log(res)
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Video download failed");
+  console.log(data)
+  if (!res.ok) {
+    console.log(data.error)
+    throw new Error(data.error || "Video download failed")};
   return { fileName: data.fileName, downloadUrl: `${BASE_URL}${data.downloadUrl}` };
 }
 
