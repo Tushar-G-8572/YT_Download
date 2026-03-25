@@ -68,7 +68,13 @@ export async function handleGetInfo(req, res) {
          audioFormats,
       });
    } catch (err) {
+      console.error('=== YT-DLP ERROR ===');
       console.log(err);
+      console.error('Message:', err.message);
+      console.error('Stack:', err.stack);
+      console.error('Full:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
+      console.error('Cookies path:', COOKIES_PATH);
+      console.error('Cookies exists:', fs.existsSync(COOKIES_PATH));
       res.status(500).json({ error: 'Failed to fetch video info. Check the URL.' });
    }
 
