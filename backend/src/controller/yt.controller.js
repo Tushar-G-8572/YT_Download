@@ -15,17 +15,12 @@ const COOKIES_PATH = process.env.NODE_ENV === 'production'
   ? '/etc/secrets/cookies.txt'
   : path.join(__dirname ,'../..','/cookies.txt'); 
 
-
-
 export async function handleGetInfo(req, res) {
    const { url } = req.query;
    if (!url) return res.status(400).json({ error: 'URL is required' });
    
    try {
       const info = await ytdlp.getInfoAsync(url, {
-         cookies: COOKIES_PATH
-      });
-      const thumbnails = await ytdlp.getThumbnailsAsync(url, {
          cookies: COOKIES_PATH
       });
 
@@ -64,7 +59,7 @@ export async function handleGetInfo(req, res) {
          viewCount: info.view_count,
          likeCount: info.like_count,
          uploadDate: info.upload_date,
-         thumbnail: thumbnails?.[thumbnails.length - 1]?.url || info.thumbnail,
+         thumbnail:  info.thumbnail,
          videoFormats,
          audioFormats,
       });
@@ -91,7 +86,7 @@ export async function handleDownloadVideo(req, res) {
          .format({ filter: 'mergevideo', quality, type: 'mp4' })
          .output(DOWNLOADS_DIR)
          .embedThumbnail()
-         .extraArgs(['--cookies', COOKIES_PATH])
+         .cookies(COOKIES_PATH)
          .run();
 
       const filePath = response.filePaths?.[0];
@@ -119,7 +114,7 @@ export async function handleDownloadAudio(req, res) {
          .format({ filter: 'audioonly', type: 'mp3' })
          .audioQuality(bitrateNum)
          .output(DOWNLOADS_DIR)
-         .extraArgs(['--cookies', COOKIES_PATH])
+         .cookies(COOKIES_PATH)
          .run();
 
       const filePath = response.filePaths?.[0];

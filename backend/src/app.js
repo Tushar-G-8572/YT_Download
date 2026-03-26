@@ -10,7 +10,6 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-app.disable('x-powered-by');
 
 app.use(cors({
     origin:[
