@@ -1,24 +1,38 @@
 import dotenv from 'dotenv'
 dotenv.config()
-import path from "path";
-import { YtDlp } from 'ytdlp-nodejs';
-const ytdlp = new YtDlp();
-const DOWNLOADS_DIR = './downloads';
 import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { execFile } from 'child_process';
+import path from "path";
 import fs from 'fs';
-
-
+import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+import { YtDlp } from 'ytdlp-nodejs';
+const ytdlp = new YtDlp({
+   binaryPath: process.env.NODE_ENV === 'production'
+      ? path.join(__dirname, '..', '..', 'bin', 'yt-dlp')  // Render
+      : 'yt-dlp'  // Local Windows (uses system PATH)
+});
+const DOWNLOADS_DIR = './downloads';
+
+
 const COOKIES_PATH = process.env.NODE_ENV === 'production'
-  ? '/etc/secrets/cookies.txt'
-  : path.join(__dirname ,'../..','/cookies.txt'); 
+   ? '/etc/secrets/cookies.txt'
+   : path.join(__dirname, '../..', '/cookies.txt');
 
 export async function handleGetInfo(req, res) {
    const { url } = req.query;
    if (!url) return res.status(400).json({ error: 'URL is required' });
-   
+   execFile('yt-dlp', [
+      '--cookies', COOKIES_PATH,
+      '--dump-json',
+      '--no-playlist',
+      url
+   ], (error, stdout, stderr) => {
+      console.log('STDOUT:', stdout?.slice(0, 200));
+      console.log('STDERR:', stderr);  // ← Real error will be here
+      console.log('ERROR:', error);
+   });
    try {
       const info = await ytdlp.getInfoAsync(url, {
          cookies: COOKIES_PATH
@@ -59,7 +73,7 @@ export async function handleGetInfo(req, res) {
          viewCount: info.view_count,
          likeCount: info.like_count,
          uploadDate: info.upload_date,
-         thumbnail:  info.thumbnail,
+         thumbnail: info.thumbnail,
          videoFormats,
          audioFormats,
       });
@@ -79,7 +93,7 @@ export async function handleGetInfo(req, res) {
 export async function handleDownloadVideo(req, res) {
    const { url, quality } = req.body;
    if (!url || !quality) return res.status(400).json({ error: 'URL and quality are required' });
-   
+
    try {
       const response = await ytdlp
          .download(url)
