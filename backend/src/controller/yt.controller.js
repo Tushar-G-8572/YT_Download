@@ -8,10 +8,12 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 import { YtDlp } from 'ytdlp-nodejs';
+const YTDLP_BINARY = process.env.NODE_ENV === 'production'
+   ? path.join(__dirname, '..', '..', 'bin', 'yt-dlp')
+   : 'yt-dlp'; // uses system PATH locally
+
 const ytdlp = new YtDlp({
-   binaryPath: process.env.NODE_ENV === 'production'
-      ? path.join(__dirname, '..', '..', 'bin', 'yt-dlp')  // Render
-      : 'yt-dlp'  // Local Windows (uses system PATH)
+   binaryPath: YTDLP_BINARY
 });
 const DOWNLOADS_DIR = './downloads';
 
@@ -23,14 +25,14 @@ const COOKIES_PATH = process.env.NODE_ENV === 'production'
 export async function handleGetInfo(req, res) {
    const { url } = req.query;
    if (!url) return res.status(400).json({ error: 'URL is required' });
-   execFile('yt-dlp', [
+   execFile(YTDLP_BINARY, [
       '--cookies', COOKIES_PATH,
       '--dump-json',
       '--no-playlist',
       url
    ], (error, stdout, stderr) => {
-      console.log('STDOUT:', stdout?.slice(0, 200));
-      console.log('STDERR:', stderr);  // ← Real error will be here
+      console.log('STDOUT:', stdout?.slice(0, 500));
+      console.log('STDERR:', stderr);
       console.log('ERROR:', error);
    });
    try {
