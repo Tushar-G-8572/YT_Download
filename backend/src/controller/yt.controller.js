@@ -160,7 +160,7 @@ export async function handleDownloadVideo(req, res) {
    try {
       const response = await ytdlp
          .download(url)
-         .format({ filter: 'audioandvideo', quality, type: 'mp4' })
+         .format({ filter: 'mergevideo', quality, type: 'mp4' })
          .output(DOWNLOADS_DIR)
          .embedThumbnail()
          .cookies(COOKIES_PATH)
