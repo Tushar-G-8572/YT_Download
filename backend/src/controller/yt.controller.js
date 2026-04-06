@@ -1,23 +1,25 @@
 import dotenv from 'dotenv'
 dotenv.config()
 import { fileURLToPath } from 'url';
-import { execFile } from 'child_process';
 import path from "path";
 import fs from 'fs';
 import os from 'os';
 import { dirname } from 'path';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
 import { YtDlp } from 'ytdlp-nodejs';
+
 const YTDLP_BINARY = process.env.NODE_ENV === 'production'
    ? path.join(__dirname, '..', '..', 'bin', 'yt-dlp')
-   : 'yt-dlp'; // uses system PATH locally
+   : 'yt-dlp';
 
-const ytdlp = new YtDlp({
-   binaryPath: YTDLP_BINARY
-});
+const ytdlp = new YtDlp({ binaryPath: YTDLP_BINARY });
+
 const DOWNLOADS_DIR = './downloads';
 
+// ── Cookies setup ──────────────────────────────────────────────────────────
 const SECRET_COOKIES = process.env.NODE_ENV === 'production'
    ? '/etc/secrets/cookies.txt'
    : path.join(__dirname, '..', '..', 'cookies.txt');
@@ -31,58 +33,106 @@ if (fs.existsSync(SECRET_COOKIES)) {
    console.error('❌ Source cookies not found:', SECRET_COOKIES);
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function extractVideoId(url) {
+   const match = url.match(/(?:v=|youtu\.be\/)([^&?/]+)/);
+   return match?.[1];
+}
+
+async function getInfoWithRetry(url, retries = 3) {
+   for (let i = 0; i < retries; i++) {
+      try {
+         return await ytdlp.getInfoAsync(url, {
+            cookies: COOKIES_PATH,
+         });
+      } catch (err) {
+         console.warn(`⚠️ getInfo attempt ${i + 1} failed:`, err.message);
+         if (i < retries - 1) {
+            await new Promise(r => setTimeout(r, 2000 * (i + 1)));
+         } else {
+            throw err;
+         }
+      }
+   }
+}
+
+// ── Controllers ────────────────────────────────────────────────────────────
 
 export async function handleGetInfo(req, res) {
    const { url } = req.query;
    if (!url) return res.status(400).json({ error: 'URL is required' });
-   execFile(YTDLP_BINARY, [
-      '--cookies', COOKIES_PATH,
-      '--dump-json',
-      '--no-playlist',
-      url
-   ], (error, stdout, stderr) => {
-      console.log('STDOUT:', stdout?.slice(0, 500));
-      console.log('STDERR:', stderr);
-      console.log('ERROR:', error);
-   });
+
+   // 1️⃣ Try YouTube Data API first (fast, no rate limit issues)
+   const videoId = extractVideoId(url);
+   if (videoId && process.env.YOUTUBE_API_KEY) {
+      try {
+         const apiRes = await fetch(
+            `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&part=snippet,contentDetails,statistics&key=${process.env.YOUTUBE_API_KEY}`
+         );
+         const data = await apiRes.json();
+         const video = data.items?.[0];
+
+         if (video) {
+            const snippet = video.snippet;
+            const stats = video.statistics;
+            const duration = video.contentDetails?.duration;
+
+            const videoFormats = [];
+            const audioFormats = [];
+            const qualityMap = {
+               '2160': '2160p (4K)', '1440': '1440p (2K)',
+               '1080': '1080p (FHD)', '720': '720p (HD)',
+               '480': '480p (SD)', '360': '360p',
+            };
+            for (const [height, label] of Object.entries(qualityMap)) {
+               videoFormats.push({ quality: `${height}p`, label, type: 'mp4', available: true });
+            }
+            audioFormats.push(
+               { quality: '320kbps', label: '320 kbps (Best)', type: 'mp3' },
+               { quality: '192kbps', label: '192 kbps (High)', type: 'mp3' },
+               { quality: '128kbps', label: '128 kbps (Medium)', type: 'mp3' },
+            );
+
+            return res.json({
+               title: snippet.title,
+               description: snippet.description,
+               duration: duration,
+               uploader: snippet.channelTitle,
+               viewCount: stats.viewCount,
+               likeCount: stats.likeCount,
+               uploadDate: snippet.publishedAt,
+               thumbnail: snippet.thumbnails?.maxres?.url || snippet.thumbnails?.high?.url,
+               videoFormats,
+               audioFormats,
+            });
+         }
+      } catch (apiErr) {
+         console.warn('⚠️ YouTube API failed, falling back to yt-dlp:', apiErr.message);
+      }
+   }
+
+   // 2️⃣ Fallback to yt-dlp with retry
    try {
-      const info = await ytdlp.getInfoAsync(url, {
-         cookies: COOKIES_PATH,
-         addHeader: [
-            'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-         ],
-         extractorArgs: 'youtube:player_client=web',
-         noWarnings: true,
-      });
+      const info = await getInfoWithRetry(url);
 
       const videoFormats = [];
       const audioFormats = [];
-
       const qualityMap = {
-         '2160': '2160p (4K)',
-         '1440': '1440p (2K)',
-         '1080': '1080p (FHD)',
-         '720': '720p (HD)',
-         '480': '480p (SD)',
-         '360': '360p',
+         '2160': '2160p (4K)', '1440': '1440p (2K)',
+         '1080': '1080p (FHD)', '720': '720p (HD)',
+         '480': '480p (SD)', '360': '360p',
       };
-
       for (const [height, label] of Object.entries(qualityMap)) {
-         videoFormats.push({
-            quality: `${height}p`,
-            label,
-            type: 'mp4',
-            available: true,
-         });
+         videoFormats.push({ quality: `${height}p`, label, type: 'mp4', available: true });
       }
-
       audioFormats.push(
          { quality: '320kbps', label: '320 kbps (Best)', type: 'mp3' },
          { quality: '192kbps', label: '192 kbps (High)', type: 'mp3' },
          { quality: '128kbps', label: '128 kbps (Medium)', type: 'mp3' },
       );
 
-      res.json({
+      return res.json({
          title: info.title,
          description: info.description,
          duration: info.duration_string || info.duration,
@@ -96,15 +146,11 @@ export async function handleGetInfo(req, res) {
       });
    } catch (err) {
       console.error('=== YT-DLP ERROR ===');
-      console.log(err);
       console.error('Message:', err.message);
-      console.error('Stack:', err.stack);
-      console.error('Full:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
       console.error('Cookies path:', COOKIES_PATH);
       console.error('Cookies exists:', fs.existsSync(COOKIES_PATH));
-      res.status(500).json({ error: 'Failed to fetch video info. Check the URL.' });
+      return res.status(500).json({ error: 'Failed to fetch video info. Check the URL.' });
    }
-
 }
 
 export async function handleDownloadVideo(req, res) {
@@ -126,17 +172,15 @@ export async function handleDownloadVideo(req, res) {
       const fileName = path.basename(filePath);
       res.json({ success: true, fileName, downloadUrl: `/downloads/${fileName}` });
    } catch (err) {
-      console.error(err);
+      console.error('Video download error:', err.message);
       res.status(500).json({ error: 'Video download failed.' });
    }
 }
-
 
 export async function handleDownloadAudio(req, res) {
    const { url, quality } = req.body;
    if (!url) return res.status(400).json({ error: 'URL is required' });
 
-   // Map "320kbps" -> "320"
    const bitrateNum = quality?.replace('kbps', '') || '192';
 
    try {
@@ -154,7 +198,7 @@ export async function handleDownloadAudio(req, res) {
       const fileName = path.basename(filePath);
       res.json({ success: true, fileName, downloadUrl: `/downloads/${fileName}` });
    } catch (err) {
-      console.error(err);
+      console.error('Audio download error:', err.message);
       res.status(500).json({ error: 'Audio download failed.' });
    }
 }
