@@ -206,10 +206,14 @@
 import dotenv from 'dotenv'
 dotenv.config()
 import { fileURLToPath } from 'url';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import path from "path";
 import fs from 'fs';
 import os from 'os';
 import { dirname } from 'path';
+
+const execFileAsync = promisify(execFile);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -248,9 +252,7 @@ function extractVideoId(url) {
 async function getInfoWithRetry(url, retries = 3) {
    for (let i = 0; i < retries; i++) {
       try {
-         return await ytdlp.getInfoAsync(url, {
-            cookies: COOKIES_PATH,
-         });
+         return await ytdlp.getInfoAsync(url, { cookies: COOKIES_PATH });
       } catch (err) {
          console.warn(`⚠️ getInfo attempt ${i + 1} failed:`, err.message);
          if (i < retries - 1) {
@@ -260,6 +262,26 @@ async function getInfoWithRetry(url, retries = 3) {
          }
       }
    }
+}
+
+// Run yt-dlp binary directly — most reliable way to pass all flags
+async function runYtDlp(args) {
+   console.log('Running yt-dlp with args:', args.join(' '));
+   const { stdout, stderr } = await execFileAsync(YTDLP_BINARY, args, {
+      maxBuffer: 100 * 1024 * 1024, // 100MB buffer
+      timeout: 5 * 60 * 1000,       // 5 min timeout
+   });
+   if (stderr) console.warn('yt-dlp stderr:', stderr);
+   return stdout;
+}
+
+// Get the most recently modified file with given extension in downloads dir
+function getLatestFile(ext) {
+   const files = fs.readdirSync(DOWNLOADS_DIR)
+      .filter(f => f.endsWith(ext))
+      .map(f => ({ name: f, time: fs.statSync(path.join(DOWNLOADS_DIR, f)).mtimeMs }))
+      .sort((a, b) => b.time - a.time);
+   return files[0]?.name || null;
 }
 
 // ── Controllers ────────────────────────────────────────────────────────────
@@ -281,7 +303,6 @@ export async function handleGetInfo(req, res) {
          if (video) {
             const snippet = video.snippet;
             const stats = video.statistics;
-            const duration = video.contentDetails?.duration;
 
             const videoFormats = [];
             const audioFormats = [];
@@ -302,7 +323,7 @@ export async function handleGetInfo(req, res) {
             return res.json({
                title: snippet.title,
                description: snippet.description,
-               duration: duration,
+               duration: video.contentDetails?.duration,
                uploader: snippet.channelTitle,
                viewCount: stats.viewCount,
                likeCount: stats.likeCount,
@@ -317,7 +338,7 @@ export async function handleGetInfo(req, res) {
       }
    }
 
-   // 2️⃣ Fallback to yt-dlp with retry
+   // 2️⃣ Fallback: yt-dlp with retry
    try {
       const info = await getInfoWithRetry(url);
 
@@ -350,10 +371,7 @@ export async function handleGetInfo(req, res) {
          audioFormats,
       });
    } catch (err) {
-      console.error('=== YT-DLP ERROR ===');
-      console.error('Message:', err.message);
-      console.error('Cookies path:', COOKIES_PATH);
-      console.error('Cookies exists:', fs.existsSync(COOKIES_PATH));
+      console.error('=== YT-DLP ERROR ===', err.message);
       return res.status(500).json({ error: 'Failed to fetch video info. Check the URL.' });
    }
 }
@@ -362,15 +380,12 @@ export async function handleDownloadVideo(req, res) {
    const { url, quality } = req.body;
    if (!url || !quality) return res.status(400).json({ error: 'URL and quality are required' });
 
-   const heightNum = quality.replace('p', ''); // "1080p" -> "1080"
-
-   // Selects best video up to the requested height + best audio, merged into mp4
-   // This guarantees the video has an audio track
+   const heightNum = quality.replace('p', '');
+   // bestvideo + bestaudio guarantees audio track in the merged mp4
    const formatStr = `bestvideo[height<=${heightNum}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${heightNum}]+bestaudio/best[height<=${heightNum}]`;
 
    try {
-      await ytdlp.exec([
-         url,
+      await runYtDlp([
          '--cookies', COOKIES_PATH,
          '-f', formatStr,
          '--merge-output-format', 'mp4',
@@ -378,18 +393,17 @@ export async function handleDownloadVideo(req, res) {
          '--add-metadata',
          '--no-playlist',
          '-o', path.join(DOWNLOADS_DIR, '%(title)s.%(ext)s'),
+         url,   // ← URL always last
       ]);
 
-      // Pick the most recently modified mp4
-      const files = fs.readdirSync(DOWNLOADS_DIR)
-         .filter(f => f.endsWith('.mp4'))
-         .map(f => ({ name: f, time: fs.statSync(path.join(DOWNLOADS_DIR, f)).mtimeMs }))
-         .sort((a, b) => b.time - a.time);
+      const fileName = getLatestFile('.mp4');
+      if (!fileName) return res.status(500).json({ error: 'Download failed — no file found' });
 
-      if (!files.length) return res.status(500).json({ error: 'Download failed — no file found' });
-
-      const fileName = files[0].name;
-      return res.json({ success: true, fileName, downloadUrl: `/api/yt/downloads/${encodeURIComponent(fileName)}` });
+      return res.json({
+         success: true,
+         fileName,
+         downloadUrl: `/api/yt/downloads/${encodeURIComponent(fileName)}`,
+      });
    } catch (err) {
       console.error('Video download error:', err.message);
       return res.status(500).json({ error: 'Video download failed.' });
@@ -403,30 +417,28 @@ export async function handleDownloadAudio(req, res) {
    const bitrateNum = quality?.replace('kbps', '') || '192';
 
    try {
-      await ytdlp.exec([
-         url,
+      await runYtDlp([
          '--cookies', COOKIES_PATH,
          '-f', 'bestaudio/best',
          '--extract-audio',
          '--audio-format', 'mp3',
          '--audio-quality', `${bitrateNum}K`,
-         '--embed-thumbnail',         // embeds cover art (poster image in media players)
-         '--embed-metadata',          // embeds title, artist, album
-         '--convert-thumbnails', 'jpg', // mp3 needs jpg not webp
+         '--embed-thumbnail',          // poster image / cover art
+         '--embed-metadata',           // title, artist, album tags
+         '--convert-thumbnails', 'jpg', // mp3 needs jpg, not webp
          '--no-playlist',
          '-o', path.join(DOWNLOADS_DIR, '%(title)s.%(ext)s'),
+         url,   // ← URL always last
       ]);
 
-      // Pick the most recently modified mp3
-      const files = fs.readdirSync(DOWNLOADS_DIR)
-         .filter(f => f.endsWith('.mp3'))
-         .map(f => ({ name: f, time: fs.statSync(path.join(DOWNLOADS_DIR, f)).mtimeMs }))
-         .sort((a, b) => b.time - a.time);
+      const fileName = getLatestFile('.mp3');
+      if (!fileName) return res.status(500).json({ error: 'Download failed — no file found' });
 
-      if (!files.length) return res.status(500).json({ error: 'Download failed — no file found' });
-
-      const fileName = files[0].name;
-      return res.json({ success: true, fileName, downloadUrl: `/api/yt/downloads/${encodeURIComponent(fileName)}` });
+      return res.json({
+         success: true,
+         fileName,
+         downloadUrl: `/api/yt/downloads/${encodeURIComponent(fileName)}`,
+      });
    } catch (err) {
       console.error('Audio download error:', err.message);
       return res.status(500).json({ error: 'Audio download failed.' });
