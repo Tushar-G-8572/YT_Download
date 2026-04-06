@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { execFile } from 'child_process';
 import path from "path";
 import fs from 'fs';
+import os from 'os';
 import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -17,10 +18,19 @@ const ytdlp = new YtDlp({
 });
 const DOWNLOADS_DIR = './downloads';
 
-
-const COOKIES_PATH = process.env.NODE_ENV === 'production'
+const SECRET_COOKIES = process.env.NODE_ENV === 'production'
    ? '/etc/secrets/cookies.txt'
-   : path.join(__dirname, '../..', '/cookies.txt');
+   : path.join(__dirname, '..', '..', 'cookies.txt');
+
+const COOKIES_PATH = path.join(os.tmpdir(), 'yt-cookies.txt');
+
+if (fs.existsSync(SECRET_COOKIES)) {
+   fs.copyFileSync(SECRET_COOKIES, COOKIES_PATH);
+   console.log('✅ Cookies copied to:', COOKIES_PATH);
+} else {
+   console.error('❌ Source cookies not found:', SECRET_COOKIES);
+}
+
 
 export async function handleGetInfo(req, res) {
    const { url } = req.query;
@@ -37,7 +47,12 @@ export async function handleGetInfo(req, res) {
    });
    try {
       const info = await ytdlp.getInfoAsync(url, {
-         cookies: COOKIES_PATH
+         cookies: COOKIES_PATH,
+         addHeader: [
+            'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+         ],
+         extractorArgs: 'youtube:player_client=web',
+         noWarnings: true,
       });
 
       const videoFormats = [];
